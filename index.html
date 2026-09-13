@@ -417,6 +417,8 @@
   let lastProactiveTime = 0;       // 上次主动发消息时间
   let lastUnrepliedCount = 0;      // 用户没回的连续条数
   let lastAIProactiveTime = 0;     // 上次AI主动消息时间
+let userTypingTimer = null;      // 用户正在打字的计时器
+  let isUserTyping = false;        // 用户是否正在打字
 
   // ---------- 判断工作日/放学时间/睡觉时间 ----------
   function getScheduleInfo() {
@@ -528,7 +530,7 @@
     let lines = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
     if (lines.length === 0) lines = [text];
     // 最多3条，避免刷屏
-    if (lines.length > 3) lines = lines.slice(0, 3);
+   if (lines.length > 4) lines = lines.slice(0, 4);
 
     for (let i = 0; i < lines.length; i++) {
       if (i > 0) await sleep(2000 + Math.random() * 1000); // 每条间隔 2~3 秒
@@ -554,8 +556,8 @@
     return false;
   }
 
-  // ---------- 用户发送消息 ----------
-  function sendUserMessage() {
+// ---------- 用户发送消息 ----------
+  function flushUserMessage() {
     const rawText = messageInput.value.trim();
     if (!rawText) return;
 
@@ -566,17 +568,30 @@
     messageInput.focus();
 
     lastUserMsgTime = Date.now();
-    lastUnrepliedCount = 0; // 用户回了，重置
-
-    // 缓冲：等用户可能继续发
+    lastUnrepliedCount = 0;
+    isUserTyping = false;
     userMsgBuffer.push(rawText);
-    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
 
-    // 如果觉得没说完，等10秒；说完就1.5秒后触发
-    const waitMs = isIncomplete(rawText) ? (3000 + Math.random() * 3000) : (Math.random() < 0.5 ? 0 : 500 + Math.random() * 1000);
+    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
     userMsgBufferTimer = setTimeout(() => {
       triggerAIReply();
-    }, waitMs);
+    }, 300);
+  }
+
+  function sendUserMessage() {
+    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
+    userMsgBufferTimer = setTimeout(() => {
+      flushUserMessage();
+    }, 500);
+  }
+
+  function onUserTyping() {
+    isUserTyping = true;
+    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
+    userMsgBufferTimer = setTimeout(() => {
+      isUserTyping = false;
+      flushUserMessage();
+    }, 800);
   }
 
   // ---------- 触发 AI 回复 ----------
@@ -588,10 +603,7 @@
 
     isWaitingReply = true;
 
-    // 5% 概率慢回（1~3分钟）
-    const slowRoll = Math.random();
-    let delay = 8000 + Math.random() * 8000; // 8~16秒
-    if (slowRoll < 0.05) delay = 60000 + Math.random() * 120000; // 1~3分钟
+ let delay = 1500 + Math.random() * 1500;
 
     await sleep(delay);
 
@@ -730,6 +742,8 @@
   messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); sendUserMessage(); }
   });
+
+  messageInput.addEventListener('input', onUserTyping);
 
   // ---------- 启动 ----------
   window.addEventListener('load', () => {
