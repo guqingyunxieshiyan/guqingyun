@@ -573,7 +573,7 @@
     if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
 
     // 如果觉得没说完，等10秒；说完就1.5秒后触发
-    const waitMs = isIncomplete(rawText) ? 10000 : 1500;
+    const waitMs = isIncomplete(rawText) ? (3000 + Math.random() * 3000) : (Math.random() < 0.5 ? 0 : 500 + Math.random() * 1000);
     userMsgBufferTimer = setTimeout(() => {
       triggerAIReply();
     }, waitMs);
@@ -758,8 +758,6 @@
     // 启动主动消息循环
     scheduleNextProactive(60000); // 1分钟后开始判断
   });
-
-})();
 </script>
 </body>
 </html>
