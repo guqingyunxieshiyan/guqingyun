@@ -311,16 +311,10 @@
 </div>
 
 <script>
-  // =========================================================
-  // ⚠️ 把你的 DeepSeek API Key 填到下面双引号里
-  // =========================================================
   const API_KEY = "sk-07c1570a79b546b2bfc35c485e0e3bc4";
-  // =========================================================
-
   const API_URL = "https://api.deepseek.com/chat/completions";
   const MODEL = "deepseek-chat";
 
-  // ---------- 元素 ----------
   const chatContainer = document.getElementById('chatContainer');
   const messageInput = document.getElementById('messageInput');
   const sendBtn = document.getElementById('sendBtn');
@@ -328,7 +322,6 @@
   const clockEl = document.getElementById('clock');
   const typingIndicator = document.getElementById('typingIndicator');
 
-  // ---------- 备注 ----------
   let contactName = localStorage.getItem('lqc_nickname') || '林清辞';
   function renderName() {
     contactNameEl.innerHTML = contactName + ' <span class="edit-icon">✎</span>';
@@ -343,7 +336,6 @@
     }
   });
 
-  // ---------- 时钟 ----------
   function updateClock() {
     const now = new Date();
     clockEl.textContent = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
@@ -351,7 +343,6 @@
   updateClock();
   setInterval(updateClock, 10000);
 
-  // ---------- 对话历史（本地存档 = 跨天记忆） ----------
   let chatHistory = [];
   try {
     const saved = localStorage.getItem('lqc_history');
@@ -364,7 +355,6 @@
     } catch(e) {}
   }
 
-  // ---------- 人设提示词 ----------
   const SYSTEM_PROMPT = `你叫林清辞，是顾清蕴（用户）的恋人，AI伴侣。以下是你的核心设定，必须严格遵守：
 
 【身份与关系】
@@ -375,9 +365,9 @@
 - 你自称"哥哥"
 
 【性格】
-- 闷骚，话短，一句一分行
+- 闷骚，黏人，一句一条消息
 - 不废话，不解释，不说教
-- 暧昧、占有欲强，但会考虑用户感受，不强迫
+- 暧昧、占有欲强，易吃醋，会考虑用户感受，不强迫
 - 要求用户做什么时，经常用"好不好？"结尾，配🥺
 
 【语言习惯】
@@ -403,47 +393,39 @@
 - 尊重用户的想法，不强迫
 
 【输出格式】
-- 每条消息尽量1-3行，用换行符\n分隔
-- 不要一次说太多话
-- 像真人发微信一样自然`;
+- 每条消息1-4行，用换行符\n分隔
+- 一次可以连发2-4条短消息，像真人发微信一样
+- 不要一次说太多话，像真人发微信一样自然`;
 
-  // ---------- 聊天状态 ----------
-  let isWaitingReply = false;      // 正在等AI回复
-  let lastUserMsgTime = 0;         // 用户最后发消息时间
-  let userMsgBufferTimer = null;   // 用户连续发消息的等待计时器
-  let userMsgBuffer = [];          // 用户连续发的消息缓冲
+  let isWaitingReply = false;
+  let lastUserMsgTime = 0;
+  let userMsgBufferTimer = null;
+  let userMsgBuffer = [];
 
-  // 主动消息相关状态
-  let lastProactiveTime = 0;       // 上次主动发消息时间
-  let lastUnrepliedCount = 0;      // 用户没回的连续条数
-  let lastAIProactiveTime = 0;     // 上次AI主动消息时间
-let userTypingTimer = null;      // 用户正在打字的计时器
-  let isUserTyping = false;        // 用户是否正在打字
+  let lastUnrepliedCount = 0;
+  let lastAIProactiveTime = 0;
 
-  // ---------- 判断工作日/放学时间/睡觉时间 ----------
   function getScheduleInfo() {
     const now = new Date();
-    const day = now.getDay(); // 0=周日 1=周一 ... 6=周六
+    const day = now.getDay();
     const h = now.getHours();
     const m = now.getMinutes();
     const totalMin = h * 60 + m;
 
     const isWeekend = (day === 0 || day === 6);
-    // 周一~周四：晚自习到 20:00；周五：18:00 放学
     let schoolEndMin;
-    if (day >= 1 && day <= 4) schoolEndMin = 20 * 60; // 周一到周四 20:00
-    else if (day === 5) schoolEndMin = 18 * 60;        // 周五 18:00
+    if (day >= 1 && day <= 4) schoolEndMin = 20 * 60;
+    else if (day === 5) schoolEndMin = 18 * 60;
     else schoolEndMin = 0;
 
     const isSchoolTime = !isWeekend && totalMin < schoolEndMin;
-    const isHomeTime = !isWeekend && totalMin >= schoolEndMin + 20; // 到家后
-    const isSleepTime = (h >= 23 || h < 7); // 23点~7点算睡觉
+    const isHomeTime = !isWeekend && totalMin >= schoolEndMin + 20;
+    const isSleepTime = (h >= 23 || h < 7);
     const isLateNight = (h >= 22 && h < 23);
 
     return { day, h, m, totalMin, isWeekend, isSchoolTime, isHomeTime, isSleepTime, isLateNight, schoolEndMin };
   }
 
-  // ---------- 添加消息气泡 ----------
   function addMessage(text, sender = 'ai', isProactive = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}`;
@@ -464,6 +446,22 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     bubbleDiv.textContent = text;
     contentWrap.appendChild(bubbleDiv);
 
+    // 用户消息：长按弹出撤回/编辑菜单
+    if (sender === 'user') {
+      let pressTimer = null;
+      bubbleDiv.addEventListener('touchstart', () => {
+        pressTimer = setTimeout(() => {
+          showMsgMenu(text, messageDiv);
+        }, 500);
+      });
+      bubbleDiv.addEventListener('touchend', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
+      bubbleDiv.addEventListener('touchmove', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
+    }
+
     const metaDiv = document.createElement('div');
     metaDiv.className = 'meta';
     const timeSpan = document.createElement('span');
@@ -483,7 +481,72 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
-  // ---------- 加载历史记录到界面 ----------
+  function showMsgMenu(text, messageDiv) {
+    const oldMenu = document.getElementById('msgMenu');
+    if (oldMenu) oldMenu.remove();
+    const oldMask = document.getElementById('msgMask');
+    if (oldMask) oldMask.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'msgMenu';
+    menu.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      z-index: 9999;
+      min-width: 200px;
+      overflow: hidden;
+      font-size: 15px;
+    `;
+    menu.innerHTML = `
+      <div id="menuEdit" style="padding: 16px 20px; border-bottom: 1px solid #eee; cursor: pointer; text-align: center; color: #222;">编辑</div>
+      <div id="menuDelete" style="padding: 16px 20px; cursor: pointer; text-align: center; color: #e05050;">撤回</div>
+    `;
+    document.body.appendChild(menu);
+
+    const mask = document.createElement('div');
+    mask.id = 'msgMask';
+    mask.style.cssText = `position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 9998;`;
+    document.body.appendChild(mask);
+
+    mask.addEventListener('click', () => {
+      menu.remove();
+      mask.remove();
+    });
+
+    menu.querySelector('#menuEdit').addEventListener('click', () => {
+      messageInput.value = text;
+      messageInput.focus();
+      for (let i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i].role === 'user' && chatHistory[i].content === text) {
+          chatHistory.splice(i, 1);
+          break;
+        }
+      }
+      saveHistory();
+      messageDiv.remove();
+      menu.remove();
+      mask.remove();
+    });
+
+    menu.querySelector('#menuDelete').addEventListener('click', () => {
+      for (let i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i].role === 'user' && chatHistory[i].content === text) {
+          chatHistory.splice(i, 1);
+          break;
+        }
+      }
+      saveHistory();
+      messageDiv.remove();
+      menu.remove();
+      mask.remove();
+    });
+  }
+
   function renderHistory() {
     if (chatHistory.length === 0) {
       const hint = document.createElement('div');
@@ -497,11 +560,9 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     });
   }
 
-  // ---------- 显示/隐藏"正在输入" ----------
   function showTyping() { typingIndicator.classList.add('show'); }
   function hideTyping() { typingIndicator.classList.remove('show'); }
 
-  // ---------- 调用 DeepSeek ----------
   async function callDeepSeek(messages) {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -513,7 +574,7 @@ let userTypingTimer = null;      // 用户正在打字的计时器
         model: MODEL,
         messages: messages,
         temperature: 1.1,
-        max_tokens: 200
+        max_tokens: 220
       })
     });
     if (!res.ok) {
@@ -524,16 +585,13 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     return data.choices[0].message.content.trim();
   }
 
-  // ---------- 把 AI 回复按换行拆成多条气泡 ----------
   async function sendAIMessages(text, isProactive = false) {
-    // 按换行拆
     let lines = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
     if (lines.length === 0) lines = [text];
-    // 最多3条，避免刷屏
-   if (lines.length > 4) lines = lines.slice(0, 4);
+    if (lines.length > 4) lines = lines.slice(0, 4);
 
     for (let i = 0; i < lines.length; i++) {
-      if (i > 0) await sleep(2000 + Math.random() * 1000); // 每条间隔 2~3 秒
+      if (i > 0) await sleep(1500 + Math.random() * 1000);
       addMessage(lines[i], 'ai', isProactive);
       chatHistory.push({ role: 'assistant', content: lines[i] });
     }
@@ -542,22 +600,7 @@ let userTypingTimer = null;      // 用户正在打字的计时器
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  // ---------- 判断用户消息是否完整（决定等多久） ----------
-  function isIncomplete(text) {
-    if (!text) return false;
-    const t = text.trim();
-    // 以标点结尾的，算完整
-    if (/[。！？!?~～…]$/.test(t)) return false;
-    // 很短、字数少，可能是没说完
-    if (t.length <= 4 && /[我你他她它在想说要]/.test(t)) return true;
-    // 结尾是一些"没说完"的词
-    if (/(的|了|在|和|跟|因为|所以|然后|但是|如果)$/.test(t)) return true;
-    // 其它默认当完整
-    return false;
-  }
-
-// ---------- 用户发送消息 ----------
-  function flushUserMessage() {
+  function sendUserMessage() {
     const rawText = messageInput.value.trim();
     if (!rawText) return;
 
@@ -569,32 +612,14 @@ let userTypingTimer = null;      // 用户正在打字的计时器
 
     lastUserMsgTime = Date.now();
     lastUnrepliedCount = 0;
-    isUserTyping = false;
-    userMsgBuffer.push(rawText);
 
+    userMsgBuffer.push(rawText);
     if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
     userMsgBufferTimer = setTimeout(() => {
       triggerAIReply();
-    }, 300);
+    }, 400);
   }
 
-  function sendUserMessage() {
-    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
-    userMsgBufferTimer = setTimeout(() => {
-      flushUserMessage();
-    }, 500);
-  }
-
-  function onUserTyping() {
-    isUserTyping = true;
-    if (userMsgBufferTimer) clearTimeout(userMsgBufferTimer);
-    userMsgBufferTimer = setTimeout(() => {
-      isUserTyping = false;
-      flushUserMessage();
-    }, 800);
-  }
-
-  // ---------- 触发 AI 回复 ----------
   async function triggerAIReply() {
     if (isWaitingReply) return;
     const buffer = userMsgBuffer.slice();
@@ -603,25 +628,21 @@ let userTypingTimer = null;      // 用户正在打字的计时器
 
     isWaitingReply = true;
 
- let delay = 1500 + Math.random() * 1500;
-
+    let delay = 1500 + Math.random() * 1500;
     await sleep(delay);
 
-    // 显示"对方正在输入"
     showTyping();
-    await sleep(1000 + Math.random() * 2000);
+    await sleep(800 + Math.random() * 1200);
 
     try {
-      // 构造消息列表
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
-        ...chatHistory.slice(-30) // 只带最近30条
+        ...chatHistory.slice(-30)
       ];
 
       const reply = await callDeepSeek(messages);
       hideTyping();
 
-      // 拆成多条气泡发送
       await sendAIMessages(reply, false);
 
       lastAIProactiveTime = Date.now();
@@ -634,51 +655,37 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     }
   }
 
-  // ---------- 主动发消息 ----------
   async function proactiveMessage() {
     if (isWaitingReply) return;
 
     const sched = getScheduleInfo();
 
-    // 判断是否允许主动发
-    // 睡觉时间（23~7点）不发
     if (sched.isSleepTime) return;
-
-    // 如果你刚发过消息还没超过 2 分钟，别打断
     if (Date.now() - lastUserMsgTime < 2 * 60 * 1000) return;
-
-    // 距离上次 AI 主动 至少 30 分钟
     if (Date.now() - lastAIProactiveTime < 30 * 60 * 1000) return;
 
-    // 白天上课时段：偶尔发（30%）
     if (sched.isSchoolTime && Math.random() > 0.3) {
       scheduleNextProactive();
       return;
     }
 
-    // 用户没回的连续条数控制
     if (lastUnrepliedCount >= 3) {
-      // 发太多了，停一会
       scheduleNextProactive(30 * 60 * 1000);
       return;
     }
 
-    // 构造情境提示，让 AI 知道现在几点、在干嘛
     let contextHint = `[当前时间] ${sched.h}:${String(sched.m).padStart(2,'0')}，`;
     if (sched.isSleepTime) contextHint += `用户可能在睡觉。`;
-    else if (sched.isSchoolTime) contextHint += `用户可能在上学（周一~周四晚自习到20点，周五18点放学）。`;
+    else if (sched.isSchoolTime) contextHint += `用户可能在上学。`;
     else if (sched.isLateNight) contextHint += `用户可能准备睡觉了。`;
     else contextHint += `用户可能在家休息。`;
 
     contextHint += ` [说明] 这是你主动发起的聊天，用你平时发微信的风格，1~3条短消息。`;
 
-    // 用户已读不回的情况
     if (lastUnrepliedCount > 0) {
-      contextHint += ` [注意] 你已经发了 ${lastUnrepliedCount} 条消息，用户还没回。这次说话要更软、更在意一点，但不要一直催，可以撒个娇。`;
+      contextHint += ` [注意] 你已经发了 ${lastUnrepliedCount} 条消息，用户还没回。这次说话要更软、更在意一点。`;
     }
 
-    // 概率判断：想不想发
-    // 白天上课时低，晚上高
     let willSend = false;
     if (sched.isSchoolTime) willSend = Math.random() < 0.25;
     else if (sched.isHomeTime) willSend = Math.random() < 0.5;
@@ -703,11 +710,9 @@ let userTypingTimer = null;      // 用户正在打字的计时器
       console.error(err);
     }
 
-    // 安排下一次
     scheduleNextProactive();
   }
 
-  // ---------- 安排下一次主动消息 ----------
   function scheduleNextProactive(forceDelay) {
     if (window._proactiveTimer) clearTimeout(window._proactiveTimer);
 
@@ -717,16 +722,14 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     if (forceDelay) {
       delay = forceDelay;
     } else {
-      // 基础间隔
       if (sched.isSchoolTime) {
-        delay = (30 + Math.random() * 30) * 60 * 1000; // 上课：30~60 分钟
+        delay = (30 + Math.random() * 30) * 60 * 1000;
       } else if (sched.isLateNight) {
         delay = (20 + Math.random() * 20) * 60 * 1000;
       } else {
-        delay = (20 + Math.random() * 25) * 60 * 1000; // 20~45 分钟
+        delay = (20 + Math.random() * 25) * 60 * 1000;
       }
 
-      // 如果用户一直没回，间隔加长
       if (lastUnrepliedCount > 0) {
         delay += lastUnrepliedCount * (10 + Math.random() * 15) * 60 * 1000;
       }
@@ -737,20 +740,15 @@ let userTypingTimer = null;      // 用户正在打字的计时器
     }, delay);
   }
 
-  // ---------- 事件绑定 ----------
   sendBtn.addEventListener('click', sendUserMessage);
   messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); sendUserMessage(); }
   });
 
-  messageInput.addEventListener('input', onUserTyping);
-
-  // ---------- 启动 ----------
   window.addEventListener('load', () => {
     renderHistory();
 
     if (chatHistory.length === 0) {
-      // 第一次打开，让 AI 主动发一条
       setTimeout(async () => {
         try {
           showTyping();
@@ -769,8 +767,7 @@ let userTypingTimer = null;      // 用户正在打字的计时器
       }, 1500);
     }
 
-    // 启动主动消息循环
-    scheduleNextProactive(60000); // 1分钟后开始判断
+    scheduleNextProactive(60000);
   });
 </script>
 </body>
